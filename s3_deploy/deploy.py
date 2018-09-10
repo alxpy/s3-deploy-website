@@ -60,7 +60,7 @@ def key_name_from_path(path):
     return '/'.join(reversed(key_parts))
 
 
-def upload_key(obj, path, cache_rules, dry, storage_class=None):
+def upload_key(obj, path, cache_rules, dry, storage_class=None, disable_compression=False):
     """Upload data in path to key."""
 
     mime_guess = mimetypes.guess_type(obj.key)
@@ -78,7 +78,7 @@ def upload_key(obj, path, cache_rules, dry, storage_class=None):
             logger.debug('Using cache control: {}'.format(cache_control))
 
         _, ext = os.path.splitext(path)
-        if ext in COMPRESSED_EXTENSIONS:
+        if ext in COMPRESSED_EXTENSIONS and not disable_compression:
             logger.info('Compressing {}...'.format(obj.key))
             compressed = BytesIO()
             gzip_file = gzip.GzipFile(
@@ -116,6 +116,7 @@ def deploy(conf, base_path, force, dry):
     bucket_name = conf['s3_bucket']
     cache_rules = conf.get('cache_rules', [])
     endpoint_url = conf.get('endpoint_url')
+    disable_compression = conf.get('disable_compression', False)
 
     if conf.get('s3_reduced_redundancy', False):
         storage_class = _STORAGE_REDUCED_REDUDANCY
@@ -154,7 +155,14 @@ def deploy(conf, base_path, force, dry):
                 logger.info('Not modified, skipping {}.'.format(obj.key))
                 continue
 
-        upload_key(obj, path, cache_rules, dry, storage_class=storage_class)
+        upload_key(
+            obj,
+            path,
+            cache_rules,
+            dry,
+            storage_class=storage_class,
+            disable_compression=disable_compression,
+        )
         updated_keys.add(obj.key)
 
     for dirpath, dirnames, filenames in os.walk(site_dir):
@@ -171,7 +179,13 @@ def deploy(conf, base_path, force, dry):
             logger.info('Creating key {}...'.format(obj.key))
 
             upload_key(
-                obj, path, cache_rules, dry, storage_class=storage_class)
+                obj,
+                path,
+                cache_rules,
+                dry,
+                storage_class=storage_class,
+                disable_compression=disable_compression,
+            )
             updated_keys.add(key_name)
 
     logger.info('Bucket update done.')
